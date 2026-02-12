@@ -5,6 +5,9 @@
 
 ---
 
+to convert to pdf and html run
+```jupyter nbconvert --to webpdf --no-input notebook.ipynb; jupyter nbconvert --to html --no-input notebook.ipynb```
+
 ## Document Map
 
 | Step | Cells | Title |
