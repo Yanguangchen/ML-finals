@@ -8230,6 +8230,7 @@ class_weight: {0: 1.0, 1: 518.1770833333334}
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="Split-Success">Split Success<a class="anchor-link" href="#Split-Success">¶</a></h3><p>The split ran successfully because we created <strong>three non-overlapping subsets</strong> (train/val/test) with clear row counts and the same number of input features (30 columns). The sizes are sensible (about 70% / 15% / 15%), and the <strong>fraud rate stays low and in the expected range</strong> across all splits.</p>
+<p>The implementation explicitly performs a <strong>time-aware split</strong> by sorting the dataframe with <code>df.sort_values("Time")</code> before slicing into train/validation/test (earlier transactions -&gt; train, later transactions -&gt; test), which mirrors real deployment.</p>
 <p>The computed <code>class_weight</code> is large for class 1, which confirms fraud is rare in the training set and will be up-weighted during training. Finally, scaling is fit on <code>X_train</code> only and then applied to validation/test, which helps prevent data leakage.</p>
 </div>
 </div>
@@ -8898,7 +8899,7 @@ Starting MLP:
 </tr>
 <tr>
 <td>Starting MLP</td>
-<td>3-layer feedforward neural network (128 → 64 → 32) with Dropout</td>
+<td>3-layer feedforward neural network (128 → 64 → 32) without Dropout</td>
 <td>First non-linear deep-learning model; captures feature interactions</td>
 </tr>
 </tbody>
@@ -9466,7 +9467,7 @@ FN                             8                 11
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="7.2-%E2%80%94-Scale-up-to-overfit-(capacity-check)">7.2 — Scale up to overfit (capacity check)<a class="anchor-link" href="#7.2-%E2%80%94-Scale-up-to-overfit-(capacity-check)">¶</a></h3><p>Chollet's workflow requires confirming that the model has <strong>enough capacity to overfit the training data</strong> before adding regularisation. If a model <em>cannot</em> overfit, it lacks the representational power to learn the underlying patterns, and no amount of tuning will help.</p>
-<p>The starting MLP from Step 5 was already built <strong>without Dropout</strong>. Here we go further and also build an <strong>oversized model</strong> (512 → 256 → 128, no Dropout, no early stopping) and train it for 60 epochs. The goal is to observe the <strong>training loss dropping near zero</strong> while the <strong>validation loss diverges</strong> — classic overfitting. This proves the MLP architecture family has sufficient capacity for this task. Regularisation (Dropout) will be introduced in the next section to tame this overfitting.</p>
+<p>The starting MLP from Step 5 was already built <strong>without Dropout</strong>. Here we go further and also build an <strong>oversized model</strong> (512 → 256 → 128, no Dropout, no early stopping) and train it for 60 epochs. The goal is to observe <strong>divergence over epochs</strong>: training loss keeps decreasing while validation loss stops improving and begins oscillating/rising. This curve-level behaviour is the key overfitting signal (more informative than only comparing final scalar losses). It proves the MLP architecture family has sufficient capacity for this task. Regularisation (Dropout) is introduced in the next section to tame this overfitting.</p>
 </div>
 </div>
 </div>
@@ -9750,6 +9751,7 @@ Tuned MLP (t=0.99)                 0.8603   0.8288   0.8214   0.8364
 <h2 id="Step-8-%E2%80%94-Final-evaluation-and-deployment-considerations">Step 8 — Final evaluation and deployment considerations<a class="anchor-link" href="#Step-8-%E2%80%94-Final-evaluation-and-deployment-considerations">¶</a></h2><p>This is the final step of Chollet's workflow. The test set has been held out since the very beginning — it was never used for training, threshold tuning, hyperparameter selection, or any other decision. This discipline ensures that the metrics reported here are an <strong>unbiased estimate</strong> of how the model would perform on truly unseen data.</p>
 <h3 id="8.1-%E2%80%94-Retrain-on-full-training-data-(train-+-validation)">8.1 — Retrain on full training data (train + validation)<a class="anchor-link" href="#8.1-%E2%80%94-Retrain-on-full-training-data-(train-+-validation)">¶</a></h3><p>Chollet's workflow recommends that, once all hyperparameters and the decision threshold have been locked in, the final model should be <strong>retrained on the combined train + validation data</strong> before the one-time test evaluation. This maximises the amount of data available for learning while preserving the held-out test set for an unbiased report.</p>
 <p>The architecture, dropout rates, learning rate, and training configuration are identical to the best configuration from Step 7. We use the same number of epochs that early stopping selected during the best validation run (to avoid needing validation-based stopping on data that is now part of training).</p>
+<p>Because we now train on <strong>train + validation combined</strong>, the class distribution changes slightly, so the positive-class weight also changes (e.g., from ~518 to ~549). This is expected and reflects the new training population.</p>
 </div>
 </div>
 </div>
@@ -9836,6 +9838,18 @@ weighted avg     0.9992    0.9993    0.9992     42722
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="8.2b-%E2%80%94-Multi-seed-test-robustness">8.2b — Multi-seed test robustness<a class="anchor-link" href="#8.2b-%E2%80%94-Multi-seed-test-robustness">¶</a></h3><p>Because the test set contains only 52 fraud cases, single-run test metrics can be noisy. To assess stability, we retrain the final model on the combined train+validation set across multiple random seeds and evaluate each run on the same held-out test set.</p>
+<p>This does <strong>not</strong> replace the official one-time test report; it quantifies model-initialisation variance around that report.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs jp-mod-noInput">
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="8.3-%E2%80%94-Validation-vs-test-comparison">8.3 — Validation vs test comparison<a class="anchor-link" href="#8.3-%E2%80%94-Validation-vs-test-comparison">¶</a></h3><p>A healthy model should show <strong>similar performance on the validation and test sets</strong>. A large gap would suggest that the threshold or hyperparameters were over-tuned to the validation set (a form of indirect data leakage). The table and analysis below examine this critically.</p>
 </div>
 </div>
@@ -9860,6 +9874,16 @@ Fraud samples — Validation: 56  |  Test: 52
 Total samples — Validation: 42721  |  Test: 42722
 </pre>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="8.3b-%E2%80%94-Test-score-distribution-diagnostics">8.3b — Test score distribution diagnostics<a class="anchor-link" href="#8.3b-%E2%80%94-Test-score-distribution-diagnostics">¶</a></h3><p>The distribution plot below checks whether the validation-optimised threshold remains appropriate on test data. If many true fraud cases cluster just below the threshold, recall loss is expected.</p>
 </div>
 </div>
 </div>
@@ -10383,7 +10407,7 @@ False Positives — predicted fraud probabilities:
 </tr>
 <tr>
 <td>Calibration</td>
-<td>How well predicted probabilities match observed event rates</td>
+<td>Degree to which predicted probabilities align with observed frequencies (e.g., among transactions predicted at 0.8, about 80% should truly be fraud)</td>
 </tr>
 <tr>
 <td>Concept drift</td>
